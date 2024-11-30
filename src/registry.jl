@@ -17,6 +17,24 @@ const idLibSndFile = :LibSndFile => UUID("b13ce0c6-77b0-50c6-a2db-140568b8d1a5")
 const idJpegTurbo = :JpegTurbo => UUID("b835a17e-a41a-41e7-81f0-2f016b05efe0")
 const idNPZ = :NPZ => UUID("15e1cf62-19b3-5cfa-8e77-841668bca605")
 
+"""
+    detect_isom(io)
+
+Detect ISO/IEC 14496-12 ISO/IEC base media format files. These files start with
+a 32-bit big-endian length, and then the string 'ftyp' which is followed by
+details of the container and codec.
+"""
+function detect_isom(io, expected_magic::AbstractVector{UInt8})
+    getlength(io) >= 8 || return false
+    # skip the length bytes
+    seek(io, 4)
+    # and check for the magic
+    magic = read!(io, Vector{UInt8}(undef, 4))
+    magic == b"ftyp" || return false
+    magic = read!(io, Vector{UInt8}(undef, 4))
+    return magic == expected_magic
+end
+
 # Cf. https://developers.google.com/speed/webp/docs/riff_container#riff_file_format, and https://learn.microsoft.com/en-us/windows/win32/xaudio2/resource-interchange-file-format--riff-#chunks
 function detect_riff(io::IO, expected_magic::AbstractVector{UInt8})
     getlength(io) >= 12 || return false
@@ -250,23 +268,9 @@ add_format(
 detectavi(io) = detect_riff(io, b"AVI ")
 add_format(format"AVI", detectavi, ".avi", [idImageMagick], [idVideoIO])
 
-"""
-    detectisom(io)
+detect_m4v(io) = detect_isom(io, b"M4V ")
+add_format(format"MP4", detect_m4v, [".m4v", ".mp4"], [idVideoIO])
 
-Detect ISO/IEC 14496-12 ISO/IEC base media format files. These files start with
-a 32-bit big-endian length, and then the string 'ftyp' which is followed by
-details of the container and codec. Finding 'ftyp' is enough to know to dispatch
-to VideoIO.
-"""
-function detectisom(io)
-    getlength(io) >= 8 || return false
-    # skip the length bytes
-    seek(io, 4)
-    # and check for the magic
-    magic = read!(io, Vector{UInt8}(undef, 4))
-    magic == b"ftyp"
-end
-add_format(format"MP4", detectisom, ".mp4", [idVideoIO])
 add_format(format"OGG", UInt8[0x4F,0x67,0x67,0x53], [".ogg",".ogv"], [idVideoIO], [idLibSndFile])
 add_format(format"MATROSKA", UInt8[0x1A,0x45,0xDF,0xA3], [".mkv",".mks",".webm"], [idVideoIO])
 
@@ -295,6 +299,8 @@ add_format(format"OUT", "# Bundle file v0.3\n", ".out", [:BundlerIO => UUID("654
 add_format(format"GSLIB", (), [".gslib",".sgems"], [:GslibIO => UUID("4610876b-9b01-57c8-9ad9-06315f1a66a5")])
 
 ### Audio formats
+detect_m4a(io) = detect_isom(io, b"M4A ")
+add_format(format"M4A", detect_m4a, ".m4a", [idVideoIO])
 detectwav(io) = detect_riff(io, b"WAVE")
 add_format(format"WAV", detectwav, ".wav", [:WAV => UUID("8149f6b0-98f6-5db9-b78f-408fbbb8ef88")], [idLibSndFile])
 add_format(format"FLAC", "fLaC", ".flac", [:FLAC => UUID("abae9e3b-a9a0-4778-b5c6-ca109b507d99")], [idLibSndFile])
